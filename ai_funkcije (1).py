@@ -19,21 +19,46 @@ def pozovi_tutora(pitanje, predmet=None, tema=None, razred=None):
     except Exception as e:
         return f"Greška u radu AI tutora: {e}"
 
+
 def evaluiraj_odgovor(pitanje, odgovor, predmet=None, tema=None, razred=None):
+    '''
+    Evaluira učenikov odgovor na osnovu pitanja i dodatnog konteksta.
+    Vraća standardizovani rezultat: status, ocena (1–5), feedback.
+    '''
     prompt = dohvati_prompt("evaluacija", predmet, tema, razred)
     try:
         prompt_text = f"Pitanje: {pitanje}\nOdgovor učenika: {odgovor}\n{prompt}"
+
         response = openai.ChatCompletion.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Ti si AI evaluator koji ocenjuje odgovore učenika."},
-                {"role": "user", "content": prompt_text}
-            ]
+            messages=[{"role": "system", "content": prompt_text}],
+            temperature=0.3
         )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Greška u evaluaciji odgovora: {e}"
 
+        output = response['choices'][0]['message']['content']
+
+        import json
+        try:
+            parsed = json.loads(output)
+        except json.JSONDecodeError:
+            parsed = {
+                "ocena": None,
+                "feedback": output.strip()
+            }
+
+        return {
+            "status": "success",
+            "ocena": parsed.get("ocena"),
+            "feedback": parsed.get("feedback")
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "ocena": None,
+            "feedback": "Došlo je do greške u evaluaciji."
+        }
 def generisi_preporuku(ocena, tema, tip_greske=None):
     if ocena == 1:
         return f"Odlično! Savladao si lekciju o {tema}. Možeš da pređeš na sledeći izazov!"
