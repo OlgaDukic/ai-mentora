@@ -38,3 +38,43 @@ Trenutno uključene funkcije su:
 - `Prompt`
 - (opciono) `Napredak`, `RoditeljskiIzvestaj`
 # ai-mentora
+
+
+AI modul: Evaluacija odgovora i preporuke
+Ovaj modul omogućava učenicima da unesu odgovore u više formata i dobiju personalizovanu evaluaciju koristeći GPT-4o.
+
+✅ Funkcionalnosti:
+Podržani formati unosa:
+
+Tekst (kucani odgovor)
+
+Slika (fotografisan rukom pisan odgovor – OCR)
+
+Govor (izgovoreni odgovor – Speech-to-Text)
+
+Evaluacija odgovora:
+
+Na osnovu pitanja i učenikovog odgovora AI daje ocenu i tekstualni feedback
+
+Prikaz rezultata:
+
+Vraća se JSON sa statusom, ocenom i komentarom AI tutora
+
+Pripremljen je i sistem za izveštaje roditeljima (tekst se generiše iz aktivnosti i preporuka)
+
+📂 Relevantni fajlovi:
+Fajl	Opis
+obrada_odgovora.py	Konverzija slike i govora u tekst, evaluacija odgovora
+ai_funkcije.py	Poziv GPT-4o modela za evaluaciju i AI tutora
+prompt_manager.py	Dinamički promptovi za različite predmete i razrede
+roditeljski_izvestaj.py	Generiše izveštaj za roditelja o radu učenika
+
+
+POST /evaluacija/
+Parametri:
+
+tip_odgovora: tekst | slika | audio
+
+odgovor_tekst / odgovor_slika / odgovor_audio
+
+pitanje: tekst pitanja
