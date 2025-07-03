@@ -31,12 +31,9 @@ def evaluiraj_odgovor(
     prompt = dohvati_prompt("evaluacija", predmet, tema, razred)
     
     # Ako nema prompta, koristi opšti fallback prompt
-    if not prompt:
-        prompt = (
-            "Uporedi učenikov odgovor sa tačnim odgovorom i kontekstom lekcije. "
-            "Odgovori samo: TAČNO, DELIMIČNO ili NETAČNO. "
-            "Obrazloži jednom rečenicom."
-        )
+   if not prompt:
+    prompt = OPSTI_PROMPTOVI.get(predmet, OPSTI_PROMPTOVI["default"])
+
 
     # Pripremi dodatni kontekst
     kontekst = ""
