@@ -1,4 +1,3 @@
-
 import os
 import openai
 import json
@@ -13,102 +12,100 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def pozovi_tutora(pitanje, predmet=None, tema=None, razred=None):
-    prompt = dohvati_prompt("tutor", predmet, tema, razred)
+def evaluiraj_odgovor(
+    pitanje,
+    odgovor,
+    predmet=None,
+    tema=None,
+    razred=None,
+    sadrzaj_lekcije=None,
+    prethodne_lekcije=None,
+    dozvoljeni_izvori=None
+):
+    """
+    Evaluira učenikov odgovor uz kontekst lekcije i dozvoljene izvore.
+    Vraća standardizovani rezultat: status, ocena (1–5), feedback i tip_greske.
+    """
+
+    # Pokušaj da dohvatiš prompt
+    prompt = dohvati_prompt("evaluacija", predmet, tema, razred)
+    
+    # Ako nema prompta, koristi opšti fallback prompt
+    if not prompt:
+        prompt = (
+            "Uporedi učenikov odgovor sa tačnim odgovorom i kontekstom lekcije. "
+            "Odgovori samo: TAČNO, DELIMIČNO ili NETAČNO. "
+            "Obrazloži jednom rečenicom."
+        )
+
+    # Pripremi dodatni kontekst
+    kontekst = ""
+    if sadrzaj_lekcije:
+        kontekst += f"\nKontekst lekcije:\n{sadrzaj_lekcije}\n"
+    if prethodne_lekcije:
+        kontekst += f"\nPrethodne lekcije:\n{prethodne_lekcije}\n"
+    if dozvoljeni_izvori:
+        kontekst += f"\nDozvoljeni izvori:\n{dozvoljeni_izvori}\n"
+
+    # Finalni tekst prompta
+    prompt_text = (
+        f"Pitanje:\n{pitanje}\n\n"
+        f"Odgovor učenika:\n{odgovor}\n"
+        f"{kontekst}\n"
+        f"{prompt}\n\n"
+        "Vrati JSON format:\n"
+        "{\n"
+        '  "ocena": broj od 1 do 5,\n'
+        '  "feedback": "kratak komentar",\n'
+        '  "tip_greske": "opis greške ili null"\n'
+        "}"
+    )
+
     try:
+        # Prvi pokušaj sa GPT-4o
         response = openai.ChatCompletion.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": pitanje}
-            ]
+                {"role": "system", "content": prompt_text}
+            ],
+            temperature=0.3
         )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error("Greška u radu AI tutora: %s", str(e))
-        return f"Greška u radu AI tutora: {e}"
+    except openai.error.OpenAIError as e:
+        logger.warning("GPT-4o neuspešan, pokušaj fallback na GPT-3.5: %s", str(e))
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": prompt_text}
+            ],
+            temperature=0.3
+        )
 
+    # Dobijeni odgovor modela
+    output = response.choices[0].message.content
 
-def evaluiraj_odgovor(pitanje, odgovor, predmet=None, tema=None, razred=None):
-    """
-    Evaluira učenikov odgovor na osnovu pitanja i dodatnog konteksta.
-    Vraća standardizovani rezultat: status, ocena (1–5), feedback i opciono tip_greske.
-    """
-    prompt = dohvati_prompt("evaluacija", predmet, tema, razred)
+    # Pokušaj da parsiraš JSON
     try:
-        prompt_text = f"Pitanje: {pitanje}\nOdgovor učenika: {odgovor}\n{prompt}"
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": prompt_text}],
-                temperature=0.3
-            )
-        except openai.error.OpenAIError as e:
-            logger.warning("GPT-4o neuspešan, pokušaj fallback: %s", str(e))
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "system", "content": prompt_text}],
-                temperature=0.3
-            )
-
-        output = response['choices'][0]['message']['content']
-        try:
-            parsed = json.loads(output)
-        except json.JSONDecodeError:
-            parsed = {
-                "ocena": None,
-                "feedback": output.strip(),
-                "tip_greske": None
-            }
-
-        ocena = parsed.get("ocena")
-        try:
-            ocena = int(ocena)
-            if ocena not in range(1, 6):
-                raise ValueError
-        except:
-            ocena = None
-
-        return {
-            "status": "success",
-            "ocena": ocena,
-            "feedback": parsed.get("feedback"),
-            "tip_greske": parsed.get("tip_greske")
-        }
-
-    except Exception as e:
-        logger.error("Greška u evaluaciji: %s", str(e))
-        return {
-            "status": "error",
-            "message": str(e),
+        parsed = json.loads(output)
+    except json.JSONDecodeError:
+        logger.warning("Neuspešno parsiranje JSON-a, vraćam plain tekst.")
+        parsed = {
             "ocena": None,
-            "feedback": "Došlo je do greške u evaluaciji.",
+            "feedback": output.strip(),
             "tip_greske": None
         }
 
+    # Validacija ocene
+    ocena = parsed.get("ocena")
+    try:
+        ocena = int(ocena)
+        if ocena not in range(1, 6):
+            raise ValueError
+    except:
+        ocena = None
 
-def generisi_preporuku(ocena, tema, tip_greske=None):
-    if tip_greske == "nedostatak primera":
-        return f"Pokušaj da dodaš konkretan primer iz teme '{tema}' i ponovo odgovori."
-    if ocena == 1:
-        return f"Odlično! Savladao si lekciju o {tema}. Možeš da pređeš na sledeći izazov!"
-    elif ocena == 2:
-        return f"Dobro ti ide sa temom '{tema}', ali bi bilo korisno da pogledaš još jedan primer ili probaš dodatnu vežbu."
-    elif ocena == 3:
-        return f"Izgleda da imaš poteškoća sa '{tema}'. Preporučujem ti da se vratiš na objašnjenje lekcije i da prođeš kroz još jedan zadatak."
-    else:
-        return "Tvoj odgovor nije mogao biti procenjen. Probaj ponovo ili obrati se svom nastavniku."
-
-
-# Ručno testiranje iz komandne linije
-if __name__ == "__main__":
-    test = evaluiraj_odgovor(
-        pitanje="Ko je napisao roman Na Drini ćuprija?",
-        odgovor="Ivo Andrić",
-        predmet="srpski jezik",
-        tema="književnost",
-        razred="8. razred"
-    )
-    print(test)
-    preporuka = generisi_preporuku(test["ocena"], "književnost", test.get("tip_greske"))
-    print("Preporuka:", preporuka)
+    return {
+        "status": "success",
+        "ocena": ocena,
+        "feedback": parsed.get("feedback"),
+        "tip_greske": parsed.get("tip_greske")
+    }
